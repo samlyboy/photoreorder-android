@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">相册重排</string>
+    <string name="pick">加载相册素材</string>
+    <string name="reload">重新加载相册</string>
+    <string name="clear">清空</string>
+    <string name="select_all">全选</string>
+    <string name="run">重新排列</string>
+    <string name="range_title">处理区间</string>
+    <string name="start_hint">1</string>
+    <string name="end_hint">1</string>
+    <string name="trim_title">视频裁头（秒）</string>
+    <string name="trim_hint">0.05</string>
+    <string name="trim_reset">恢复 0.05</string>
+    <string name="order_title">重排后的顺序</string>
+</resources>
