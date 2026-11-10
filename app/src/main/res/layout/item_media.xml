@@ -15,7 +15,17 @@
         android:id="@+id/scrim"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#B3000000"
+        android:background="#000000"
+        android:visibility="gone" />
+
+    <ImageView
+        android:id="@+id/unselectedMark"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:layout_gravity="bottom|start"
+        android:layout_margin="4dp"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_deselected"
         android:visibility="gone" />
 
     <TextView

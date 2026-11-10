@@ -71,19 +71,30 @@ public class GridAdapter extends RecyclerView.Adapter<GridAdapter.Holder> {
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
         MediaItem item = items.get(position);
-        holder.origin.setText(String.valueOf(position + 1));
-
+        boolean selected = item.selected;
         Integer number = item.number > 0 ? item.number : null;
-        if (number != null && item.selected) {
+        boolean inRange = selected && number != null;
+
+        holder.origin.setText(String.valueOf(position + 1));
+        holder.origin.setAlpha(selected ? 1f : 0.7f);
+
+        if (inRange) {
             holder.badge.setVisibility(View.VISIBLE);
             holder.badge.setText(String.valueOf(number));
         } else {
             holder.badge.setVisibility(View.GONE);
         }
 
-        holder.scrim.setVisibility(item.selected ? View.GONE : View.VISIBLE);
-        holder.image.setAlpha(item.selected ? 1f : 0.35f);
+        // 对齐 iOS 的压暗规则：在区间内 0、选中但不在区间 0.45、未选中 0.66
+        // 只压遮罩、不降图片自身 alpha —— 两层叠在一起会把格子压成纯黑
+        float dim = !selected ? 0.66f : (inRange ? 0f : 0.45f);
+        holder.scrim.setAlpha(dim);
+        holder.scrim.setVisibility(dim > 0.01f ? View.VISIBLE : View.GONE);
+
+        holder.image.setAlpha(1f);
+        holder.unselectedMark.setVisibility(selected ? View.GONE : View.VISIBLE);
         holder.videoMark.setVisibility(item.video ? View.VISIBLE : View.GONE);
+        holder.videoMark.setAlpha(selected ? 1f : 0.75f);
 
         long k = key(item);
         holder.image.setTag(k);
@@ -125,6 +136,7 @@ public class GridAdapter extends RecyclerView.Adapter<GridAdapter.Holder> {
         final TextView badge;
         final View scrim;
         final TextView videoMark;
+        final ImageView unselectedMark;
 
         Holder(@NonNull View itemView) {
             super(itemView);
@@ -133,6 +145,7 @@ public class GridAdapter extends RecyclerView.Adapter<GridAdapter.Holder> {
             badge = itemView.findViewById(R.id.badge);
             scrim = itemView.findViewById(R.id.scrim);
             videoMark = itemView.findViewById(R.id.videoMark);
+            unselectedMark = itemView.findViewById(R.id.unselectedMark);
         }
     }
 }

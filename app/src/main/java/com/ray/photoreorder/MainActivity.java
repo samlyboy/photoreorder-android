@@ -192,8 +192,15 @@ public class MainActivity extends AppCompatActivity {
         refreshAll();
     }
 
+    /** 全选：所有素材都选上，同时把起止铺满整个区间（否则底部只会算 1 个） */
     private void selectAll() {
+        boolean reverse = isReverseRange();
         for (MediaItem m : items) m.selected = true;
+        int n = items.size();
+        if (n > 0) {
+            inputStart.setText(reverse ? String.valueOf(n) : "1");
+            inputEnd.setText(reverse ? "1" : String.valueOf(n));
+        }
         adapter.notifyDataSetChanged();
         refreshAll();
     }
