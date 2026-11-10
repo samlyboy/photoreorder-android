@@ -7,14 +7,18 @@ import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -23,23 +27,28 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final int PAGE = 300;
+    private static final int PAGE = 200;
 
     private final List<MediaItem> items = new ArrayList<>();
     private GridAdapter adapter;
     private int limit = PAGE;
     private boolean running = false;
+    private boolean loading = false;
 
-    private Button btnPick, btnClear, btnSelectAll, btnLoadMore, btnAll, btnRun;
-    private TextView txtStats, btnDirection, txtRangeHint1, txtRangeHint2, txtOrder, txtOrderHint,
-            txtProgress, txtFoot;
+    private TextView btnPick, btnClear, btnSelectAll, btnPanel, btnDirection;
+    private Button btnAll, btnRun;
+    private TextView txtStats, txtRangeHint1, txtRangeHint2, txtOrder, txtOrderHint,
+            txtProgress, txtFoot, txtGridHint;
     private EditText inputStart, inputEnd;
     private RecyclerView grid;
+    private ScrollView panel;
     private LinearLayout progressOverlay;
 
     private ActivityResultLauncher<String[]> permissionLauncher;
@@ -52,10 +61,11 @@ public class MainActivity extends AppCompatActivity {
         btnPick = findViewById(R.id.btnPick);
         btnClear = findViewById(R.id.btnClear);
         btnSelectAll = findViewById(R.id.btnSelectAll);
-        btnLoadMore = findViewById(R.id.btnLoadMore);
+        btnPanel = findViewById(R.id.btnPanel);
         btnAll = findViewById(R.id.btnAll);
         btnRun = findViewById(R.id.btnRun);
         txtStats = findViewById(R.id.txtStats);
+        txtGridHint = findViewById(R.id.txtGridHint);
         btnDirection = findViewById(R.id.btnDirection);
         txtRangeHint1 = findViewById(R.id.txtRangeHint1);
         txtRangeHint2 = findViewById(R.id.txtRangeHint2);
@@ -66,11 +76,26 @@ public class MainActivity extends AppCompatActivity {
         inputStart = findViewById(R.id.inputStart);
         inputEnd = findViewById(R.id.inputEnd);
         grid = findViewById(R.id.grid);
+        panel = findViewById(R.id.panel);
         progressOverlay = findViewById(R.id.progressOverlay);
 
         adapter = new GridAdapter(this, items, 4, this::onToggle);
         grid.setLayoutManager(new GridLayoutManager(this, 4));
         grid.setAdapter(adapter);
+        grid.setItemAnimator(null);
+        grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
+                if (dy <= 0) return;
+                GridLayoutManager lm = (GridLayoutManager) rv.getLayoutManager();
+                if (lm == null) return;
+                // 快到底部时自动再读一批更早的素材
+                if (lm.findLastVisibleItemPosition() >= items.size() - 12
+                        && items.size() >= limit) {
+                    loadMedia(limit + PAGE);
+                }
+            }
+        });
 
         permissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestMultiplePermissions(), result -> {
@@ -82,9 +107,9 @@ public class MainActivity extends AppCompatActivity {
             if (hasPermission()) loadMedia(PAGE);
             else permissionLauncher.launch(neededPermissions());
         });
-        btnLoadMore.setOnClickListener(v -> loadMedia(limit + PAGE));
-        btnClear.setOnClickListener(v -> clearAll());
+        btnClear.setOnClickListener(v -> clearSelection());
         btnSelectAll.setOnClickListener(v -> selectAll());
+        btnPanel.setOnClickListener(v -> togglePanel());
         btnDirection.setOnClickListener(v -> toggleDirection());
         btnAll.setOnClickListener(v -> {
             int n = selectedItems().size();
@@ -125,15 +150,26 @@ public class MainActivity extends AppCompatActivity {
     // ---------------------------------------------------------------- 加载
 
     private void loadMedia(int newLimit) {
+        if (loading) return;
+        loading = true;
         limit = newLimit;
         txtStats.setText("正在读取相册…");
         new Thread(() -> {
             List<MediaItem> loaded = MediaRepo.load(this, limit);
+
+            // 重新读取时保留用户已经做过的勾选
+            final Map<Long, Boolean> prev = new HashMap<>();
+            for (MediaItem m : items) prev.put(m.id, m.selected);
+
             runOnUiThread(() -> {
+                loading = false;
                 items.clear();
-                items.addAll(loaded);
+                for (MediaItem m : loaded) {
+                    Boolean sel = prev.get(m.id);
+                    if (sel != null) m.selected = sel;
+                    items.add(m);
+                }
                 adapter.notifyDataSetChanged();
-                btnLoadMore.setVisibility(loaded.size() >= limit ? View.VISIBLE : View.GONE);
                 if (inputEnd.getText().toString().trim().isEmpty()
                         || inputEnd.getText().toString().equals("1")) {
                     inputEnd.setText(String.valueOf(Math.max(1, selectedItems().size())));
@@ -144,9 +180,10 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    private void clearAll() {
+    /** 全不选 */
+    private void clearSelection() {
         for (MediaItem m : items) {
-            m.selected = true;
+            m.selected = false;
             m.number = 0;
         }
         inputStart.setText("1");
@@ -159,6 +196,29 @@ public class MainActivity extends AppCompatActivity {
         for (MediaItem m : items) m.selected = true;
         adapter.notifyDataSetChanged();
         refreshAll();
+    }
+
+    private void togglePanel() {
+        boolean show = panel.getVisibility() != View.VISIBLE;
+        if (show) {
+            // 面板最多占半屏，剩下的全留给网格，保证网格永远能滚
+            panel.getViewTreeObserver().addOnGlobalLayoutListener(
+                    new ViewTreeObserver.OnGlobalLayoutListener() {
+                        @Override
+                        public void onGlobalLayout() {
+                            panel.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                            int max = (int) (getResources().getDisplayMetrics()
+                                    .heightPixels * 0.5f);
+                            if (panel.getHeight() > max) {
+                                ViewGroup.LayoutParams lp = panel.getLayoutParams();
+                                lp.height = max;
+                                panel.setLayoutParams(lp);
+                            }
+                        }
+                    });
+        }
+        panel.setVisibility(show ? View.VISIBLE : View.GONE);
+        btnPanel.setText(show ? "参数 ▴" : "参数 ▾");
     }
 
     private void onToggle(int position) {
@@ -259,7 +319,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (items.isEmpty()) {
-            txtStats.setText("尚未加载");
+            txtStats.setText(loading ? "正在读取相册…" : "相册里没有读到素材");
         } else {
             txtStats.setText(String.format(Locale.CHINA, "共 %d 个 · 已选 %d · 图 %d · 视 %d",
                     items.size(), selected.size(), imageCount, videoCount));
@@ -280,7 +340,7 @@ public class MainActivity extends AppCompatActivity {
         btnDirection.setAlpha(n < 2 ? 0.4f : 1f);
 
         int amount = n == 0 ? 0 : Math.abs(s - e) + 1;
-        txtRangeHint1.setText(n == 0 ? "先在下面网格里点选素材"
+        txtRangeHint1.setText(n == 0 ? "先在网格里点选素材"
                 : (reverse ? "倒序：从第 " + s + " 个往第 " + e + " 个走，共 " + amount + " 个"
                 : "正序：从第 " + s + " 个往第 " + e + " 个走，共 " + amount + " 个"));
         txtRangeHint2.setText(n == 0 ? "" :
@@ -298,7 +358,7 @@ public class MainActivity extends AppCompatActivity {
                 sb.append(" → ").append(i + 1).append("·").append(entry.item.kindLabel());
             }
             txtOrder.setText(sb.toString());
-            txtOrderHint.setText("这行是写进相册的先后（图视交替）；右上角红圆是烧进画面的编号，两者是两套号");
+            txtOrderHint.setText("这行是写进相册的先后（图视交替）；右上角红圈是烧进画面的编号，两者是两套号");
         } else {
             txtOrder.setText("—");
             txtOrderHint.setText("");

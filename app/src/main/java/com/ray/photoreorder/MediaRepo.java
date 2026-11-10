@@ -11,9 +11,10 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-/** 读取系统相册（MediaStore），图片 + 视频合并，按拍摄时间升序 */
+/** 读取系统相册（MediaStore），图片 + 视频合并，按拍摄时间倒序（最新在前） */
 public class MediaRepo {
 
+    /** 最新在前：第 1 个 = 相册里最新的，往下滑越来越旧 */
     public static List<MediaItem> load(Context context, int limit) {
         List<MediaItem> all = new ArrayList<>();
         all.addAll(query(context, true, limit));
@@ -21,9 +22,12 @@ public class MediaRepo {
         Collections.sort(all, new Comparator<MediaItem>() {
             @Override
             public int compare(MediaItem a, MediaItem b) {
-                return Long.compare(a.dateMillis, b.dateMillis);
+                return Long.compare(b.dateMillis, a.dateMillis); // 倒序
             }
         });
+        if (all.size() > limit) {
+            return new ArrayList<>(all.subList(0, limit));
+        }
         return all;
     }
 

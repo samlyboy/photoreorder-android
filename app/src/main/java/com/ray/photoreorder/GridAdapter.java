@@ -42,13 +42,18 @@ public class GridAdapter extends RecyclerView.Adapter<GridAdapter.Holder> {
         this.items = items;
         this.toggle = toggle;
         int width = context.getResources().getDisplayMetrics().widthPixels;
-        int padding = dp(32);
-        int gap = dp(4) * (spanCount - 1);
-        this.cellSize = Math.max(dp(60), (width - padding - gap) / spanCount);
+        // RecyclerView 左右各 10dp padding，每格四周 2dp margin
+        int usable = width - dp(20) - dp(4) * spanCount;
+        this.cellSize = Math.max(dp(48), usable / spanCount);
     }
 
     private int dp(int v) {
         return (int) (v * context.getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    /** 图片和视频的 MediaStore id 来自不同表，可能重号，用符号区分 */
+    private long key(MediaItem item) {
+        return item.video ? -item.id : item.id;
     }
 
     @NonNull
@@ -80,8 +85,9 @@ public class GridAdapter extends RecyclerView.Adapter<GridAdapter.Holder> {
         holder.image.setAlpha(item.selected ? 1f : 0.35f);
         holder.videoMark.setVisibility(item.video ? View.VISIBLE : View.GONE);
 
-        holder.image.setTag(item.id);
-        Bitmap cached = cache.get(item.id);
+        long k = key(item);
+        holder.image.setTag(k);
+        Bitmap cached = cache.get(k);
         if (cached != null) {
             holder.image.setImageBitmap(cached);
         } else {
@@ -91,13 +97,13 @@ public class GridAdapter extends RecyclerView.Adapter<GridAdapter.Holder> {
                 try {
                     bmp = context.getContentResolver()
                             .loadThumbnail(item.uri, new Size(cellSize, cellSize), null);
-                    cache.put(item.id, bmp);
+                    cache.put(k, bmp);
                 } catch (Exception ignored) {
                 }
                 Bitmap result = bmp;
                 if (result != null) {
                     holder.image.post(() -> {
-                        if (item.id == (Long) holder.image.getTag()) {
+                        if (k == (Long) holder.image.getTag()) {
                             holder.image.setImageBitmap(result);
                         }
                     });
